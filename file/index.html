@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="{CHARSET}">
+		<title>文件上传</title>
+		<meta charset="utf-8">
+		<link rel="stylesheet" href="css/index.css" />
+	</head>
+	<body>
+		<div>
+			<p>上传文件</p>
+			<div class="fileUpload"><span>上传文件</span><input type="file" class="uploadFiles" title="上传文件"/></div>
+			<div class='fileList'>
+				
+			</div>
+		</div>
+		<hr/>
+		<div>
+			<p>上传文件夹</p>
+			<div class="floderUpload"><span>上传文件夹</span><input type="file" title="上传文件夹" class="uploadFloder" multiple  webkitdirectory/></div>
+			<div class='floderList'>
+			</div>
+		</div>
+		<hr/>
+		
+		<div>
+			<p>拖拽上传</p>
+			<div class="dropZone">
+				<p>请将文件拖拽在此</p>
+			</div>
+			<div class='filesList'>
+			</div>
+		</div>
+		<hr/>
+		<!--显示上传文件区域-->
+		<div>
+			<button onclick="cancel()">取消上传</button>
+			<button onclick="upload()">提交</button>
+		</div>
+		<p>上传文件流列表</p>
+		<div class='documnetFlow'>
+			
+		</div>
+	</body>
+	<script src="js/jquery-1.12.3.js"></script>
+	<script>
+		/*创建上传文件的数据结构对象*/
+		function fileObject(){
+			this.upFileSize=32768;//切片文件大小
+			this.needuploadsNum=0;//上传文件分片次数
+			this.fileUpswait=[];//待上传的文件数组
+			this.fileFlaw="";//待上传的文件，用于切片
+			this.fileIndex=0;//当前上传的文件对应的组数
+		}
+		var fileuploadNew=new fileObject();
+		/*上传文件*/
+		$(".uploadFiles").change(function(e){
+			var fileInfo=[];
+			fileInfo.push($(this)[0].files[0]);
+			$(this).val("");
+			var upFileList={"data":fileInfo};
+			fileuploadNew.fileUpswait.push(upFileList);
+			uploadInfo(fileInfo,$(".fileList"),"file");
+		})
+		/*上传文件夹*/
+		$(".uploadFloder").change(function(e){
+			var FloderInfo=Object.values(e.target.files);
+			$(this).val("");
+			var upFileList={"data":FloderInfo};
+			fileuploadNew.fileUpswait.push(upFileList);
+			uploadInfo(FloderInfo,$(".floderList"),"floder");
+		})
+		/*显示上传信息*/
+		function uploadInfo(filesList,elem,type){
+			elem.html("");//清空数据
+			if(type=="file"){
+				for(var i in filesList){
+					var _file=$('<p><span>文件名：'+filesList[i].name+'</span><span>文件大小：'+filesList[i].size+'字节</span></p>');
+					elem.append(_file);
+				}
+			}else if(type=="floder"){
+				var i=0;
+				while(i<filesList.length){
+					var _file=$('<p><span>文件名：'+filesList[i].webkitRelativePath+'</span><span>文件大小：'+filesList[i].size+'字节</span></p>');
+					elem.append(_file);
+					i++;
+				}
+			}
+		}
+		
+		/*提交上传的文件*/
+		
+		/*在切割大文件的时候可能遇到浏览器的卡顿，所以使用webwoker创建第二个js线程,注意webworker不能在创建的js进程里面操作dom*/
+		var worker = new Worker('js/fileWork.js');
+		function upload(e){
+			if(fileuploadNew.fileUpswait.length<=0){
+				var fileUploadEnd=$('<p>没有待上传文件，请选择上传文件</p>');
+				$(".documnetFlow").append(fileUploadEnd);
+				return false;
+			}
+			
+			if(fileuploadNew.fileIndex<fileuploadNew.fileUpswait.length){
+				
+				$(".documnetFlow").html("");//清空上传文件流列表
+				/*
+				 *status 
+				 * 1,准备上传，向子进程发送信息
+				 * */
+				worker.postMessage({"fileIndex":fileuploadNew.fileIndex,"fileList":fileuploadNew.fileUpswait,"fileSize":fileuploadNew.upFileSize,"status":1});
+				worker.onmessage = function(event) {
+					if(event.data.status==1){
+						var _fileFlow=$('<p>传递进度:'+event.data.fileBlob.size+'字节</p>');
+						$(".documnetFlow").append(_fileFlow);
+					}else if(event.data.status==2){
+						fileuploadNew.fileIndex++;
+						upload();
+					}else if(event.data.status==3){
+						var _fileFlow=$('<p>文件名:'+event.data.fileName+'&nbsp;&nbsp;文件大小：'+event.data.fileSize+'字节</p>');
+						$(".documnetFlow").append(_fileFlow);
+					}
+				}
+				
+			}else{
+				fileuploadNew.fileIndex=0;
+				fileuploadNew.needuploadsNum=0;
+				fileuploadNew.fileUpswait=[];
+				//worker.terminate();//关闭线程
+				
+				var fileUploadEnd=$('<p>上传结束</p>');
+				$(".documnetFlow").append(fileUploadEnd);
+				return false;
+			}
+			return false;
+		}
+		/*取消上传*/
+		function cancel(){
+			$(".fileList").html("");
+			$(".floderList").html("");
+			$(".filesList").html("");
+			$(".documnetFlow").html("");
+			fileuploadNew.fileUpswait=[];
+		}
+	</script>
+</html>
